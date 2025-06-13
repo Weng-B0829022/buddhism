@@ -1,0 +1,251 @@
+影片生成服務架構設計文檔 (更新版)
+=======================================
+
+## 目錄結構
+
+services_new/
+├── __init__.py
+├── main_pipeline.py               # 主要流程控制器
+├── processors/
+│   ├── __init__.py
+│   ├── base_processor.py          # 基礎處理器抽象類
+│   ├── image_processor.py         # 圖片下載處理器
+│   ├── audio_processor.py         # 聲音下載處理器
+│   ├── character_processor.py     # 人偶生成處理器
+│   ├── scene_compositor.py        # 單一場景合成處理器
+│   └── final_compositor.py        # 最終合成處理器
+├── managers/
+│   ├── __init__.py
+│   ├── asset_manager.py           # 資產檔案管理
+│   ├── storage_manager.py         # 儲存空間管理
+│   └── progress_manager.py        # 進度追蹤管理
+├── utils/
+│   ├── __init__.py
+│   ├── file_operations.py         # 檔案操作工具
+│   ├── media_converters.py        # 媒體格式轉換工具
+│   ├── validation.py              # 資料驗證工具
+│   └── error_handlers.py          # 錯誤處理工具
+├── config/
+│   ├── __init__.py
+│   ├── settings.py                # 配置設定
+│   └── constants.py               # 常數定義
+└── legacy/                        # 舊版服務 (保留相容性)
+    ├── __init__.py
+    ├── news_service.py
+    ├── news_gen_voice_and_video.py
+    ├── news_gen_img.py
+    ├── storyboard_manager.py
+    ├── create_scene.py
+    ├── config.py
+    └── upload_to_bucket.py
+
+## 主要流程設計 (MainPipeline)
+
+### 流程步驟:
+```
+1. 初始化階段
+   - 驗證輸入資料
+   - 生成唯一 ID
+   - 創建工作目錄結構
+
+2. 場景處理循環 (for each scene)
+   - Step 1: 下載/生成圖片 (ImageProcessor)
+   - Step 2: 下載/生成聲音 (AudioProcessor)  
+   - Step 3: 使用聲音生成人偶 (CharacterProcessor) - 依賴聲音完成
+   - Step 4: 合成場景 (SceneCompositor) - 合成上述結果
+
+3. 最終合成階段
+   - 合併所有場景 (FinalCompositor)
+   - 添加 Logo/浮水印
+   - 輸出最終影片
+```
+
+## 核心類別設計
+
+### 1. MainPipeline (主控制器)
+- 屬性:
+  - storyboard: 分鏡稿資料
+  - random_id: 唯一識別碼
+  - scenes: 場景列表
+  - processors: 處理器字典
+  - progress_manager: 進度管理器
+  - asset_manager: 資產管理器
+- 方法:
+  - initialize(): 初始化工作環境
+  - execute(): 執行完整流程
+  - process_scenes(): 處理所有場景
+  - process_single_scene(): 處理單一場景
+  - final_composition(): 最終合成
+  - cleanup(): 清理資源
+
+### 2. BaseProcessor (基礎處理器)
+- 屬性: 
+  - status: 處理狀態
+  - progress: 進度百分比
+  - error_message: 錯誤訊息
+- 方法:
+  - process(): 抽象處理方法
+  - validate_input(): 輸入驗證
+  - cleanup(): 清理資源
+  - get_status(): 取得狀態
+
+### 3. ImageProcessor (圖片處理器)
+- 繼承: BaseProcessor
+- 功能: 根據場景文字生成/下載圖片
+- 輸入: 場景文字描述
+- 輸出: 圖片檔案路徑
+
+### 4. AudioProcessor (聲音處理器)
+- 繼承: BaseProcessor
+- 功能: 根據場景文字生成語音
+- 輸入: 場景文字內容
+- 輸出: 音訊檔案路徑
+
+### 5. CharacterProcessor (人偶處理器)
+- 繼承: BaseProcessor
+- 功能: 基於音訊生成對應的人偶動畫
+- 輸入: 音訊檔案路徑
+- 輸出: 人偶動畫檔案路徑
+- 依賴: AudioProcessor 必須先完成
+
+### 6. SceneCompositor (場景合成器)
+- 繼承: BaseProcessor
+- 功能: 合成單一場景的所有元素
+- 輸入: 圖片、音訊、人偶檔案路徑
+- 輸出: 場景影片檔案路徑
+
+### 7. FinalCompositor (最終合成器)
+- 繼承: BaseProcessor
+- 功能: 合併所有場景並添加最終元素
+- 輸入: 所有場景影片檔案路徑
+- 輸出: 最終影片檔案路徑
+- 額外功能: 添加 Logo、浮水印、片頭片尾
+
+## 處理流程詳細設計
+
+### Phase 1: 初始化階段
+```python
+def initialize(self, storyboard_data):
+    1. 驗證輸入資料格式
+    2. 生成唯一 random_id
+    3. 創建工作目錄結構
+    4. 初始化所有處理器
+    5. 設定進度追蹤
+```
+
+### Phase 2: 場景處理循環
+```python
+def process_scenes(self):
+    for scene_index, scene in enumerate(self.scenes):
+        # Step 1: 圖片處理
+        image_path = self.image_processor.process(scene)
+        
+        # Step 2: 聲音處理
+        audio_path = self.audio_processor.process(scene)
+        
+        # Step 3: 人偶處理 (依賴聲音)
+        character_path = self.character_processor.process(audio_path)
+        
+        # Step 4: 場景合成
+        scene_video = self.scene_compositor.process({
+            'image': image_path,
+            'audio': audio_path, 
+            'character': character_path,
+            'scene_data': scene
+        })
+        
+        self.scene_videos.append(scene_video)
+```
+
+### Phase 3: 最終合成階段
+```python
+def final_composition(self):
+    final_video = self.final_compositor.process({
+        'scene_videos': self.scene_videos,
+        'logo_path': self.config.get('logo_path'),
+        'watermark': self.config.get('watermark'),
+        'intro': self.config.get('intro_video'),
+        'outro': self.config.get('outro_video')
+    })
+    return final_video
+```
+
+## 錯誤處理與依賴管理
+
+### 1. 依賴關係
+- CharacterProcessor 依賴 AudioProcessor
+- SceneCompositor 依賴前三個處理器
+- FinalCompositor 依賴所有場景處理完成
+
+### 2. 錯誤處理策略
+- 單一場景失敗不影響其他場景
+- 關鍵步驟失敗時提供降級方案
+- 保留中間產物供除錯使用
+
+### 3. 進度追蹤
+- 總進度 = (場景進度 * 場景數量 + 最終合成進度) / (場景數量 + 1)
+- 每個處理器提供細粒度進度更新
+
+## 配置管理
+
+### 1. 處理器配置
+- 各處理器獨立配置檔案
+- 支援環境變數覆蓋
+- 動態配置更新
+
+### 2. 資源配置
+- Logo 檔案路徑
+- 浮水印設定
+- 輸出格式配置
+- 暫存目錄設定
+
+## 擴展性設計
+
+### 1. 新處理器加入
+- 繼承 BaseProcessor
+- 註冊到主流程
+- 定義依賴關係
+
+### 2. 流程自定義
+- 支援跳過特定步驟
+- 支援並行處理獨立步驟
+- 支援自定義處理順序
+
+### 3. 輸出格式擴展
+- 支援多種影片格式
+- 支援不同解析度
+- 支援客製化元素添加
+
+## 監控與日誌
+
+### 1. 進度追蹤
+- 每個處理器提供進度百分比
+- 整體流程進度計算
+- 預估完成時間
+
+### 2. 日誌記錄
+- 結構化日誌 (JSON 格式)
+- 分級日誌 (DEBUG, INFO, WARNING, ERROR)
+- 性能指標記錄
+
+### 3. 狀態管理
+- 處理器狀態: PENDING, RUNNING, COMPLETED, FAILED
+- 工作流狀態: 與處理器狀態聚合
+- 持久化狀態儲存
+
+## 性能優化
+
+### 1. 並行處理
+- 多執行緒處理獨立任務
+- 非同步 I/O 操作
+- 資源池管理
+
+### 2. 快取策略
+- 中間結果快取
+- 重複請求快取
+- 快取失效策略
+
+### 3. 資源管理
+- 記憶體使用監控
+- 磁碟空間管理
+- CPU 使用優化 
