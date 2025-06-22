@@ -5,8 +5,8 @@ import NewsModal from '../../components/NewsModal';
 import { getWordCount } from '../../api/getWordCount';
 import useSnack from '../../hooks/useSnack';
 import { extractKeywordNewsFact } from '../../utils/newsProcessor';
-import newsProcessor from '../../utils/newsProcessor';
 // Type definitions
+
 
 interface SearchResult {
     title: string;
@@ -102,8 +102,6 @@ const Create = () => {
         // Replace with actual navigation logic
     };
     
-    // Mock useParams
-    const id = 'mock-id';
 
     const updateState = (key: keyof ComponentState, value: string | string[]) => {
         setState(prev => ({
@@ -138,7 +136,7 @@ const Create = () => {
             // 準備要傳送的資料
             const contentData = {
                 metadata: {
-                    id: id,
+                    id: 'mock-id',
                     timestamp: new Date().toISOString(),
                     keyword: state.topicKeyword
                 },
@@ -165,23 +163,11 @@ const Create = () => {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             const data = await response.json();
-            await extractKeywordNewsFact(data);
+            const created_content  = await extractKeywordNewsFact(data);
             
-            // 保存分镜稿数据到 localStorage
-            if (data && data.storyboard) {
-                const storyboardData = {
-                    title: data.title || state.topicKeyword,
-                    avatar: data.avatar || "man1",
-                    avatarType: data.avatarType || "half",
-                    background: data.background || "background1",
-                    storyboard: data.storyboard || [],
-                    random_id: data.random_id || Date.now().toString(),
-                    timestamp: new Date().toISOString()
-                };
-                
-                localStorage.setItem('currentStoryboard', JSON.stringify(storyboardData));
-                console.log('Storyboard saved to localStorage:', storyboardData);
-            }
+            
+            localStorage.setItem('created_content', JSON.stringify(created_content));
+            console.log('Storyboard saved to localStorage:', created_content);
             
         } catch (error) {
             console.error('Error processing selected news:', error);
@@ -192,8 +178,9 @@ const Create = () => {
             if (newTimer) {
                 clearInterval(newTimer);
             }
-
-            window.location.href = `/generate`;
+            setTimeout(() => {
+                window.location.href = `/generate`;
+            }, 200);
         }
     };
 

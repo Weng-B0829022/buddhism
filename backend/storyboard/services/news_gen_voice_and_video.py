@@ -1,7 +1,6 @@
 import os
 import logging
 from django.conf import settings
-from voice_api import VoiceAPI
 import concurrent.futures
 import re
 import io

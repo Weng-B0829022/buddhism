@@ -73,8 +73,6 @@ proglog==0.1.10
 pydub==0.25.1
 requests==2.32.3
 tqdm==4.66.5
-google-auth-oauthlib
-google-auth
-google-api-python-client
-google-cloud-storage
+cloudinary==1.40.0
+
 

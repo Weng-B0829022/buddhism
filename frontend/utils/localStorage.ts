@@ -4,7 +4,7 @@
 export const loadScenesFromLocalStorage = () => {
   try {
     console.log('🔍 正在從 localStorage 讀取數據...');
-    const savedData = localStorage.getItem('createdContent');
+    const savedData = localStorage.getItem('created_content');
     console.log('📦 localStorage 原始數據:', savedData);
     
     if (savedData) {

@@ -11,5 +11,6 @@ __all__ = [
     'validate_storyboard_data',
     'FileOperations',
     'MediaConverter',
-    'ErrorHandler'
+    'ErrorHandler',
+    'CDNUploader'
 ] 

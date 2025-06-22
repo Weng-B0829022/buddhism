@@ -6,7 +6,6 @@
 from typing import Dict, List, Any, Optional
 import logging
 import os
-from .managers.asset_manager import AssetManager
 from .processors.image_processor import ImageProcessor
 from .processors.audio_processor import AudioProcessor
 from .processors.character_processor import CharacterProcessor
@@ -15,6 +14,11 @@ from .processors.final_compositor import FinalCompositor
 from .utils.validation import validate_storyboard_data
 from .config.settings import get_default_config
 from projectNews.settings import BASE_DIR
+import cloudinary
+import cloudinary.uploader
+
+from dotenv import load_dotenv
+load_dotenv()
 
 class MainPipeline:
     """
@@ -37,7 +41,6 @@ class MainPipeline:
         self.scene_videos = []
         
         # 管理器
-        self.asset_manager = None
         self.progress_manager = None
         self.output_path = None
         # 處理器
@@ -50,10 +53,10 @@ class MainPipeline:
             
 
             # 2. 生成唯一 ID
-            self.random_id = self._generate_random_id()
+            self.random_id = 'ppxsrz95b7'
             
             self.storyboard = storyboard
-            
+            self.title = self.storyboard.get('title', 'untitled')
             self.scenes = storyboard.get('storyboard', [])
             
             #創建輸出目錄
@@ -70,10 +73,6 @@ class MainPipeline:
         """執行完整流程"""
         try:
             self.logger.info("開始執行主流程")
-            
-            # 檢查是否已經初始化
-            if self.storyboard is None or self.random_id is None:
-                raise ValueError("尚未執行初始化，請先調用 initialize() 方法")
             
             # Phase 1: 處理所有場景
             self.process_scenes()
@@ -103,51 +102,87 @@ class MainPipeline:
         if not self.storyboard or not self.scenes:
             self.logger.warning("沒有可處理的場景資料")
             return []
-            
-        #下載圖片
-        image_urls = [scene.get('imageUrl') for scene in self.storyboard.get('storyboard', [])]
-        title = self.storyboard.get('title', 'untitled')
         
-        image_processor = ImageProcessor(image_urls, self.output_path, title)
-        image_processor.process()
+        #下載圖片
+        # image_urls = [scene.get('imageUrl') for scene in self.scenes]
+        # image_processor = ImageProcessor(image_urls, self.output_path, self.title)
+        # image_processor.process()
+
         #下載聲音
-        for scene in self.scenes:
-            audio_processor = AudioProcessor(self.config.get('audio_processor', {}))
-            audio_processor.process(scene)
+        # audio_description = [scene.get('voiceover') for scene in self.scenes]
+        # print(audio_description)
+        # audio_processor = AudioProcessor(audio_description, self.output_path, self.title)
+        # audio_processor.process()
+        
+
+        #audio_urls = self.upload_assets_to_cdn()
+
         #生成人偶
-        for scene in self.scenes:
-            character_processor = CharacterProcessor(self.config.get('character_processor', {}))
-            character_processor.process(scene)
+        
+        # character_processor = CharacterProcessor(audio_urls, self.output_path, self.title)
+        # character_processor.process()
+
+        
+        # return []
+
+    #對每一個場景合成
+    def process_single_scene(self) -> str:
         #合成場景
-        for scene in self.scenes:
-            scene_compositor = SceneCompositor(self.config.get('scene_compositor', {}))
-            scene_compositor.process(scene)
-        return []
+        scene_compositor = SceneCompositor(self.output_path, self.title)
+        scene_compositor.process()
+
+
+        return scene_compositor.result_paths
     
-    def process_single_scene(self, scene_index: int, scene_data: Dict) -> str:
-        """處理單一場景"""
-        # TODO: 實作單一場景處理邏輯
-        return f"/generated/{self.random_id}/scene_{scene_index}.mp4"
-    
+    #最終合成
     def final_composition(self) -> str:
         """最終合成階段"""
         # TODO: 實作最終合成邏輯
-        return f"/generated/{self.random_id}/final_video.mp4"
+        return 
     
-    def _initialize_processors(self):
-        """初始化所有處理器"""
-        self.processors = {
-            'image': ImageProcessor(self.config.get('image_processor', {})),
-            'audio': AudioProcessor(self.config.get('audio_processor', {})),
-            'character': CharacterProcessor(self.config.get('character_processor', {})),
-            'scene_compositor': SceneCompositor(self.config.get('scene_compositor', {})),
-            'final_compositor': FinalCompositor(self.config.get('final_compositor', {}))
-        }
-        
-        self.logger.debug(f"已初始化 {len(self.processors)} 個處理器")
-    
+
     def _generate_random_id(self) -> str:
         """生成唯一識別碼"""
         import random
         import string
         return ''.join(random.choices(string.ascii_lowercase + string.digits, k=10)) 
+    
+    def upload_assets_to_cdn(self) -> List[str]:
+        """上傳所有生成的 MP3 資源到 CDN"""
+        try:
+            self.logger.info("開始上傳 MP3 資源到 CDN")
+            
+            if not self.output_path or not os.path.exists(self.output_path):
+                self.logger.warning("輸出目錄不存在，跳過 CDN 上傳")
+                return []
+            
+            # Cloudinary 設定（建議用環境變數管理）
+            cloudinary.config(
+                cloud_name = os.getenv('CLOUDINARY_CLOUD_NAME'),
+                api_key = os.getenv('CLOUDINARY_API_KEY'),
+                api_secret = os.getenv('CLOUDINARY_API_SECRET')
+            )
+            
+            # 找出所有 mp3 檔案
+            audio_files = [f for f in os.listdir(self.output_path) if f.endswith('.mp3')]
+            audio_urls = []
+            for filename in audio_files:
+                file_path = os.path.join(self.output_path, filename)
+                response = cloudinary.uploader.upload(
+                    file_path,
+                    resource_type="video",  # MP3 屬於 Cloudinary 的「video」資源類型
+                    public_id=f"{filename}"
+                )
+                audio_urls.append(response["secure_url"])
+                self.logger.info(f"已上傳: {filename} -> {response['secure_url']}")
+            
+            self.uploaded_assets = {
+                'audio_urls': audio_urls
+            }
+            self.logger.info(f"CDN 上傳完成，共上傳 {len(audio_urls)} 個 MP3 檔案")
+            return audio_urls
+        
+        except Exception as e:
+            self.logger.error(f"CDN 上傳失敗: {e}")
+            self.uploaded_assets = {'audio_urls': []}
+            return []

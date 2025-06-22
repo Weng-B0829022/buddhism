@@ -5,11 +5,9 @@ from rest_framework.views import APIView
 from django.views import View
 from django.http import FileResponse, HttpResponseNotFound, HttpResponseBadRequest, JsonResponse
 from django.conf import settings
-from storyboard.services.news_service import process_storyboard
 import traceback
 import os
 import logging
-from storyboard.services.news_gen_voice_and_video import VoiceAPI, API_BASE_IP, VOICE_API_PORT
 from storyboard.services_new.main_pipeline import MainPipeline
 
 logger = logging.getLogger(__name__)
